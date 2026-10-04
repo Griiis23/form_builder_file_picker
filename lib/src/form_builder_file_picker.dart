@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:community_material_icon/community_material_icon.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_form_builder/flutter_form_builder.dart';
 
@@ -65,14 +65,6 @@ class FormBuilderFilePicker
 
   final int compressionQuality;
 
-  /// If [withData] is set, picked files will have its byte data immediately available on memory as [Uint8List]
-  /// which can be useful if you are picking it for server upload or similar.
-  final bool withData;
-
-  /// If [withReadStream] is set, picked files will have its byte data available as a [Stream<List<int>>]
-  /// which can be useful for uploading and processing large files.
-  final bool withReadStream;
-
   /// If specified, the return value of this callback will be used to render the file viewer for the picked files.
   /// Specifying this callback can be useful to customize the look and feel of the file viewer, as well as
   /// to support user interactions with the picked files.
@@ -100,8 +92,6 @@ class FormBuilderFilePicker
     super.onReset,
     super.focusNode,
     this.maxFiles,
-    this.withData = kIsWeb,
-    this.withReadStream = false,
     this.allowMultiple = false,
     this.previewImages = true,
     this.typeSelectors = const [
@@ -163,6 +153,34 @@ class FormBuilderFilePicker
   createState() => _FormBuilderFilePickerState();
 }
 
+class _FileImagePreview extends StatefulWidget {
+  const _FileImagePreview({super.key, required this.file});
+
+  final PlatformFile file;
+
+  @override
+  State<_FileImagePreview> createState() => _FileImagePreviewState();
+}
+
+class _FileImagePreviewState extends State<_FileImagePreview> {
+  late final Future<Uint8List> _bytes = widget.file.readAsBytes();
+
+  @override
+  Widget build(BuildContext context) {
+    final path = widget.file.path;
+    if (path != null) {
+      return Image.file(File(path), fit: BoxFit.cover);
+    }
+
+    return FutureBuilder<Uint8List>(
+      future: _bytes,
+      builder: (context, snapshot) => snapshot.hasData
+          ? Image.memory(snapshot.data!, fit: BoxFit.cover)
+          : const SizedBox.shrink(),
+    );
+  }
+}
+
 class _FormBuilderFilePickerState
     extends
         FormBuilderFieldDecorationState<
@@ -203,18 +221,25 @@ class _FormBuilderFilePickerState
     FormFieldState<List<PlatformFile>?> field,
     FileType fileType,
   ) async {
-    FilePickerResult? resultList;
+    List<PlatformFile> pickedFiles = [];
 
     try {
-      resultList = await FilePicker.pickFiles(
-        type: fileType,
-        allowedExtensions: widget.allowedExtensions,
-        compressionQuality: widget.compressionQuality,
-        onFileLoading: widget.onFileLoading,
-        allowMultiple: widget.allowMultiple,
-        withData: widget.withData,
-        withReadStream: widget.withReadStream,
-      );
+      if (widget.allowMultiple) {
+        pickedFiles = await FilePicker.pickFiles(
+          type: fileType,
+          allowedExtensions: widget.allowedExtensions,
+          compressionQuality: widget.compressionQuality,
+          onFileLoading: widget.onFileLoading,
+        );
+      } else {
+        final pickedFile = await FilePicker.pickFile(
+          type: fileType,
+          allowedExtensions: widget.allowedExtensions,
+          compressionQuality: widget.compressionQuality,
+          onFileLoading: widget.onFileLoading,
+        );
+        if (pickedFile != null) pickedFiles = [pickedFile];
+      }
     } on Exception catch (e) {
       debugPrint(e.toString());
     }
@@ -223,8 +248,8 @@ class _FormBuilderFilePickerState
     // setState to update our non-existent appearance.
     if (!mounted) return;
 
-    if (resultList != null) {
-      setState(() => _files = [..._files, ...resultList!.files]);
+    if (pickedFiles.isNotEmpty) {
+      setState(() => _files = [..._files, ...pickedFiles]);
       // TODO: Pick only remaining number
       field.didChange(_files);
     }
@@ -282,15 +307,10 @@ class _FormBuilderFilePickerState
                                 files[index].extension!.toLowerCase(),
                               ) &&
                               widget.previewImages)
-                          ? widget.withData
-                                ? Image.memory(
-                                    files[index].bytes!,
-                                    fit: BoxFit.cover,
-                                  )
-                                : Image.file(
-                                    File(files[index].path!),
-                                    fit: BoxFit.cover,
-                                  )
+                          ? _FileImagePreview(
+                              key: ObjectKey(files[index]),
+                              file: files[index],
+                            )
                           : Container(
                               alignment: Alignment.center,
                               color: theme.primaryColor,
