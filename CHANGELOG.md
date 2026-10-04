@@ -1,3 +1,10 @@
+## Unreleased
+
+### BREAKING CHANGES
+
+* Remove `withData` and `withReadStream`; use `PlatformFile.readAsBytes()` or `PlatformFile.readAsByteStream()` to read file contents
+* Compatibility with `file_picker` 13.1.x. See details on their [changelog](https://pub.dev/packages/file_picker/changelog)
+
 ## 5.1.0
 
 * Update constraints to Flutter 3.38

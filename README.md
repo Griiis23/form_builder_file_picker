@@ -76,7 +76,6 @@ FormBuilderFilePicker(
   name: "attachments",
   previewImages: false,
   allowMultiple: true,
-  withData: true,
   typeSelectors: [
     TypeSelector(
       type: FileType.any,
